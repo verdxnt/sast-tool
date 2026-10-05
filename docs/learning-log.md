@@ -38,7 +38,7 @@ and Semgrep's free rules.
 A vulnerability = tainted data reaches a sink without passing through
 a sanitizer.
 
-**How I traced it by hand** (run in the repo root)
+**How I traced it by hand**
 1. Find sources:   `grep -n "request\." *.py`
 2. Find sinks:     `grep -nE "subprocess|os\.system|open\(|send_file|eval\(" *.py`
 3. Follow the value: `grep -n "url" *.py`
