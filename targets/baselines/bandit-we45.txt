@@ -1,0 +1,58 @@
+bandit 1.6.2
+  python version = 3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]
+Run started:2026-11-17 19:30:41.492022
+
+Test results:
+>> Issue: [B303:blacklist] Use of insecure MD2, MD4, MD5, or SHA1 hash function.
+   Severity: Medium   Confidence: High
+   Location: /home/tobiloba/Vulnerable-Flask-App/app/app.py:141
+   More Info: https://bandit.readthedocs.io/en/latest/blacklists/blacklist_calls.html#b303-md5
+140	            password = content['password']
+141	            hash_pass = hashlib.md5(password).hexdigest()
+142	            new_user = User(username, hash_pass)
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   Location: /home/tobiloba/Vulnerable-Flask-App/app/app.py:295
+   More Info: https://bandit.readthedocs.io/en/latest/blacklists/blacklist_calls.html#b311-random
+294	        f = request.files['file']
+295	        rand = random.randint(1, 100)
+296	        fname = secure_filename(f.filename)
+
+--------------------------------------------------
+>> Issue: [B311:blacklist] Standard pseudo-random generators are not suitable for security/cryptographic purposes.
+   Severity: Low   Confidence: High
+   Location: /home/tobiloba/Vulnerable-Flask-App/app/app.py:319
+   More Info: https://bandit.readthedocs.io/en/latest/blacklists/blacklist_calls.html#b311-random
+318	        f = request.files['file']
+319	        rand = random.randint(1, 100)
+320	        fname = secure_filename(f.filename)
+
+--------------------------------------------------
+>> Issue: [B506:yaml_load] Use of unsafe yaml load. Allows instantiation of arbitrary objects. Consider yaml.safe_load().
+   Severity: Medium   Confidence: High
+   Location: /home/tobiloba/Vulnerable-Flask-App/app/app.py:329
+   More Info: https://bandit.readthedocs.io/en/latest/plugins/b506_yaml_load.html
+328	
+329	        ydata = yaml.load(y)
+330	
+
+--------------------------------------------------
+
+Code scanned:
+	Total lines of code: 282
+	Total lines skipped (#nosec): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0.0
+		Low: 2.0
+		Medium: 2.0
+		High: 0.0
+	Total issues (by confidence):
+		Undefined: 0.0
+		Low: 0.0
+		Medium: 0.0
+		High: 4.0
+Files skipped (0):
