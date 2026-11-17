@@ -1,3 +1,16 @@
+# Learning log
+
+Weekly devlog (Sundays, 5-10 lines) plus concept notes. Newest at the bottom.
+
+<!-- Weekly template:
+### Week of <date>
+- Built:
+- Broke / surprised me:
+- Measured:
+- Decided:
+- Next:
+-->
+
 ## 2026-10-03: Concept: tracing tainted data (source → sink)
 
 **vocabulary**
@@ -27,3 +40,17 @@ a sanitizer.
   hardest for tools to follow.
 - A validator that returns True/False doesn't clean the value. A tool
   has to understand that the code after the check only runs if it passed.
+
+## 2026-11-17: Symlinks and terminal redirection
+
+**Symlink.** `ln -s ~/Vulnerable-Flask-App targets/Vulnerable-Flask-App` makes
+a pointer, not a copy. The target app stays in its own git repo (so I can pin
+its commit), but my tool can reach it at a path inside this repo. Git stores
+only the link, and `.gitignore` (`targets/*/`) keeps it out of commits.
+
+**Redirection.** `>` sends a command's output to a file and overwrites it, `>>`
+appends. The shell opens the file before the command runs, so `>` creates the
+file but not a missing folder, which is why I ran `mkdir -p targets/baselines`
+first. Only stdout is redirected; error messages still print to the terminal.
+That is how I saved the Bandit and Semgrep baselines, and kept the Semgrep
+version in a separate file so the JSON stays parseable.
