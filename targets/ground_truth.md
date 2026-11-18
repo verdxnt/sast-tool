@@ -14,7 +14,7 @@ Each chain: source, sanitizer, hops, sink. "In scope" says which release should 
 | GT-2 | Unsafe deserialization | `/yaml_hammer` (POST), file content | v0.1 |
 | GT-2b | Path traversal (blocked by sanitizer, must not be flagged) | `/yaml_hammer` (POST), filename | v0.2 (safe case: tests false positives) |
 | GT-3 | Template injection (SSTI) | 404 handler `pnf` | v0.1 |
-| GT-4 | Template injection (SSTI) | `/search` error path, line 280 (`str(e)`) | not yet traced |
+| GT-4 | Template injection (SSTI) | `/search` error path, line 280 (`str(e)`) | v0.2 (taint passes through an exception) |
 
 ---
 
@@ -145,4 +145,55 @@ return render_template_string(template, current_url=request.url), 404
 - Order is the reason the fix works: Jinja parses the template first and fills in values afterward as plain text, so a value is never parsed as template code. Flask also autoescapes HTML in values.
 - Principle: data goes in the context, never in the template string. It's the same idea as a parameterized SQL query.
 - My first fix attempt left `% request.url` after switching to `{{ }}`, used an undefined variable (`user_input`), and kept `dir`, `help` and `locals` that the template never used.
-- The same mistake is on line 280 in `/search` (`str(e)` pasted into a template string), which is still to be traced (GT-4).
+- The same mistake is on line 280 in `/search` (`str(e)` pasted into a template string), which is traced below as GT-4.
+
+
+## GT-4: `/search` exception handler (`search_customer`, `except` block)
+
+**Vulnerability:** Server-side template injection (SSTI), triggered through SQL injection
+
+### Chain (original code)
+
+```
+source:     line 255   (request.json, the JSON body the client sent)
+sanitizer:  none
+hop:        line 259   (content['search'] → search_term)
+hop:        line 261   (% formatting pastes search_term into str_query)
+hop:        line 265   (db.engine.execute raises a database error; SQLAlchemy copies the SQL statement into the error message)
+hop:        lines 270-280   (except ... as e; % str(e) pastes the message into the template text)
+sink:       line 281   (render_template_string(template, ...))
+```
+
+### Preconditions
+
+- A valid JWT for any user. `verify_jwt` checks the token, and nothing checks roles.
+- The payload must make the query fail, for example with an unclosed quote. A payload that runs cleanly never reaches `except`.
+- SQLAlchemy 1.x. In 2.0, `Engine.execute` was removed, so line 265 raises `AttributeError`. That message holds no attacker data, so there's no SSTI (and no SQLi).
+- The route decorator needs its `@`. Without it, the function is never registered.
+
+### Explanation
+
+`search_term` goes into the SQL text unescaped. A payload like `{{7*7}}'` leaves an unmatched quote, so the database rejects the statement. SQLAlchemy builds its error message from the driver error plus the full statement (`[SQL: SELECT ... WHERE username = '{{7*7}}'';]`), so `str(e)` contains the payload exactly as sent. That message is pasted into the template text before Jinja parses it, so Jinja runs it and the page shows `49`. As in GT-3, this reaches Python objects and the OS: remote code execution for anyone with a valid token.
+
+One payload uses both bugs: the SQL injection causes the error, and the error message carries the template code to the sink.
+
+### Fix
+
+1. **Fixes the SSTI:** keep the template text fixed and pass the message as a variable (`{{ error }}` with `render_template_string(template, error=str(e))`). Drop `dir`, `help` and `locals`.
+2. **Better:** don't send exception text to the client at all. `str(e)` also leaks the SQL query and table names.
+
+```python
+except Exception:
+    app.logger.exception("search failed")
+    return jsonify({'Error': 'Search failed'}), 500
+```
+
+3. **Parameterizing the query** (the SQLi fix) removes this trigger but not the bug. Any other exception whose message includes user input would reach the sink again.
+
+### What I learned from this trace
+
+- Taint can pass through an exception: `e` is tainted when the call that raised it took tainted input and the library copies that input into the message.
+- A finding can have preconditions (auth, a payload that causes an error, the library version). They decide whether it's exploitable, so the GT records them.
+- Bugs can chain: here the SQLi is the trigger for the SSTI.
+- Sources are where attacker data enters (`request.*`); sinks are where it exits to an interpreter. I mixed these up in Step 2.
+- SAST rule idea: mark `e` as tainted only when the `try` block passed tainted data to a call. That catches this case without flagging every `except` block.
