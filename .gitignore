@@ -222,4 +222,5 @@ __marimo__/
 # Project
 CLAUDE.local.md
 targets/*/
+targets/Vulnerable-Flask-App
 !targets/baselines/

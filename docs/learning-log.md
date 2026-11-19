@@ -78,3 +78,50 @@ version in a separate file so the JSON stays parseable.
 - Next: save and commit GT-4; compare scan results to ground truth in
   `docs/results.md`; `ast.dump` exercise; Crafting Interpreters ch. 2 (1 hour
   cap); tag v0.0.0 on Sunday Nov 22.
+
+## 2026-11-19: Concept: reading the AST and designing the taint tracker on paper
+
+**Reading `ast.dump`.** The AST is a tree of nodes, each with a type name and
+fields. A line like `x = y` is an `Assign` with `targets` (left side) and
+`value` (right side). The nodes I need for the we45 chains:
+- `Subscript(value, slice)`: `content['search']`. `value` is what's indexed
+  (`content`), `slice` is the key.
+- `Attribute(value, attr)`: `request.json`. `value` is the object before the
+  dot (a `Name`, `request`), `attr` is the plain string `'json'`. I first guessed
+  the data was inside `value`; it's the object, not the JSON.
+- `Call(func, args)`: `db.engine.execute(q)`. `func` is nested `Attribute`s
+  ending in a `Name`.
+
+**What the tool remembers.** It never runs the code, so it can't know the
+data. It tracks a label: "this name is tainted." I started with a set of
+names, but a set can't show how a name became tainted. A dict from name to
+path (line and code of each hop) can, and the path is what prints as
+source, hops, sink.
+
+**Walking the `/search` lines by hand:** line 255 `content = request.json`
+adds `content`; line 259 `search_term = content['search']` adds `search_term`;
+line 261 `str_query = "..." % search_term` adds `str_query`. The state accumulates
+(earlier names stay). Line 265 doesn't add anything: it's a sink check. A
+finding needs two things: the call's `func` matches a known sink, and an argument
+is a key in the taint dict.
+
+**Limits I noticed in my own design:** `ast.walk` on the right side finds
+every name in an expression, including inside `secure_filename(f.filename)`, so
+GT-2b will probably be a false positive in v0.1. Reassignment handling is
+unsound across `if`/`else`. Both go in `docs/limitations.md` once the tool
+shows them.
+
+**Questions I could answer after:** why `src/sast_tool/` and not `sast_tool/`;
+what `python -m sast_tool` runs; what `pip install -e` changes.
+
+### Week of 2026-11-16 (continued, Nov 19)
+- Built: nothing in code. Did the `ast.dump` exercise and designed the taint
+  tracker on paper. Logged five design decisions in `docs/decisions.md`.
+- Broke / surprised me: my first picture of `request.json` was wrong
+  (`value` holds the object, not the data). Writing the dict by hand
+  showed I had recorded names but not line numbers.
+- Decided: dict of paths, per-function state, `ast.walk` on the right side,
+  reassignment removes the name (decisions 002 to 005).
+- Next: step 1 of v0.1: build `src/sast_tool/` and `pyproject.toml` myself,
+  move `find_routes`, check `pip install -e .`, `python -m sast_tool
+  <path>` and `pytest`. Then sources (step 2).
